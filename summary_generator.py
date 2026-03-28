@@ -1,7 +1,23 @@
 def generate_summary(df, stats):
     rows, cols = df.shape
-    column = stats["Analyzed Column"]
 
+    # -------- MULTI-METRIC MODE --------
+    if stats["Mode"] == "Multi-Metric":
+
+        summary = (
+            f"The uploaded dataset contains {rows} records and {cols} attributes. "
+            f"It includes multiple measurable metrics for comparison. "
+            f"The best performing metric is '{stats['Best Performing Metric']}' "
+            f"with an average value of {stats['Best Average']}. "
+            f"The weakest metric is '{stats['Weakest Metric']}' "
+            f"with an average value of {stats['Weakest Average']}. "
+            f"This indicates variation in performance across different metrics."
+        )
+
+        return summary
+
+    # -------- SINGLE-METRIC MODE --------
+    column = stats["Analyzed Column"]
     column_lower = column.lower()
 
     # Guess domain

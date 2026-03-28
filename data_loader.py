@@ -5,7 +5,10 @@ def load_file(filepath):
     ext = os.path.splitext(filepath)[1]
 
     if ext == ".csv":
-        df = pd.read_csv(filepath)
+        try:
+            df = pd.read_csv(filepath, encoding="utf-8")
+        except UnicodeDecodeError:
+            df = pd.read_csv(filepath, encoding="latin1")
     elif ext == ".xlsx":
         df = pd.read_excel(filepath)
     elif ext == ".xls":

@@ -37,18 +37,50 @@ def generate_pdf(stats, summary_text, pdf_path="output/report.pdf"):
         y -= 0.7*cm
 
     # -------- Page 2: Charts --------
+    # -------- Charts Section --------
     c.showPage()
     c.setFont("Helvetica-Bold", 14)
     c.drawString(2*cm, height - 2*cm, "Data Visualizations")
 
-    c.drawImage("output/histogram.png", 2*cm, height - 9*cm, width=14*cm, height=6*cm)
-    c.drawImage("output/boxplot.png", 2*cm, height - 16*cm, width=10*cm, height=4*cm)
+    if stats["Mode"] == "Multi-Metric":
 
-    # -------- Page 3: Categories --------
-    c.showPage()
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(2*cm, height - 2*cm, "Category-wise Analysis")
+        # Only comparison chart
+        c.drawImage(
+            "output/comparison.png",
+            2*cm,
+            height - 12*cm,
+            width=14*cm,
+            height=8*cm
+        )
 
-    c.drawImage("output/categories.png", 2*cm, height - 14*cm, width=12*cm, height=8*cm)
+    else:
+        # Single metric charts
+        c.drawImage(
+            "output/histogram.png",
+            2*cm,
+            height - 9*cm,
+            width=14*cm,
+            height=6*cm
+        )
+
+        c.drawImage(
+            "output/boxplot.png",
+            2*cm,
+            height - 16*cm,
+            width=10*cm,
+            height=4*cm
+        )
+
+        c.showPage()
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(2*cm, height - 2*cm, "Category-wise Analysis")
+
+        # c.drawImage(
+        #     "output/categories.png",
+        #     2*cm,
+        #     height - 14*cm,
+        #     width=12*cm,
+        #     height=8*cm
+        # )
 
     c.save()

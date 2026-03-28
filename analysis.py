@@ -1,36 +1,64 @@
 def is_id_column(series):
     name = series.name.lower()
-    if "id" in name or "ean" in name or "index" in name or "no" in name:
-        return True
 
+    # Strong keyword filtering
+    id_keywords = [
+        "id", "number", "no", "code",
+        "order", "customer", "product",
+        "ean", "index"
+    ]
+
+    for word in id_keywords:
+        if word in name:
+            return True
+
+    # High uniqueness ratio (almost every row unique)
     unique_ratio = series.nunique() / len(series)
-    if unique_ratio > 0.95:
+    if unique_ratio > 0.9:
         return True
 
     return False
 
 
 def calculate_stats(df):
+    
     numeric_df = df.select_dtypes(include='number')
 
     if numeric_df.empty:
         raise ValueError("No numeric columns found in the dataset")
 
-    valid_numeric = []
-    for col in numeric_df.columns:
-        if not is_id_column(numeric_df[col]):
-            valid_numeric.append(col)
+    # Remove ID-like columns
+    valid_numeric = [
+        col for col in numeric_df.columns
+        if not is_id_column(numeric_df[col])
+    ]
 
-    # Fallback: if everything rejected, use best numeric anyway
     if not valid_numeric:
-        valid_numeric = list(numeric_df.columns)
+        raise ValueError("Only identifier columns found. No meaningful data to analyze.")
 
-    target_column = numeric_df[valid_numeric].var().idxmax()
+    # -------- MULTI METRIC MODE --------
+    if len(valid_numeric) > 1:
+        averages = numeric_df[valid_numeric].mean()
 
-    if numeric_df[target_column].isna().all():
-        raise ValueError("All numeric values are missing or invalid")
+        best_subject = averages.idxmax()
+        worst_subject = averages.idxmin()
+
+        stats = {
+            "Mode": "Multi-Metric",
+            "Analyzed Columns": valid_numeric,
+            "Best Performing Metric": best_subject,
+            "Best Average": round(averages.max(), 2),
+            "Weakest Metric": worst_subject,
+            "Weakest Average": round(averages.min(), 2)
+        }
+
+        return stats, valid_numeric
+
+    # -------- SINGLE METRIC MODE --------
+    target_column = valid_numeric[0]
 
     stats = {
+        "Mode": "Single-Metric",
         "Analyzed Column": target_column,
         "Total": numeric_df[target_column].sum(),
         "Average": numeric_df[target_column].mean(),

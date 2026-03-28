@@ -5,7 +5,7 @@ from report import generate_pdf
 from summary_generator import generate_summary
 
 try:
-    data = load_file("indian_engineering_student_placement.csv")
+    data = load_file("student_marks.csv")
 
     stats, column_used = calculate_stats(data)
 
