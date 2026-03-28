@@ -9,8 +9,11 @@ def generate_charts(df, columns):
 
         averages = df[columns].mean()
 
+        # select top 6 metrics only
+        top_columns = averages.sort_values(ascending=False).head(6)
+
         plt.figure(figsize=(8,5))
-        averages.plot(kind='bar')
+        top_columns.plot(kind='bar')
         plt.title("Average Comparison Across Metrics")
         plt.ylabel("Average Value")
         plt.xticks(rotation=45)
@@ -23,7 +26,7 @@ def generate_charts(df, columns):
 
         # -------- Histogram --------
         plt.figure(figsize=(7,5))
-        df[columns].dropna().plot(kind="hist", bins=12)
+        df[columns].dropna().plot(kind="hist", bins=20, edgecolor='black')
         plt.title(f"Distribution of {columns}")
         plt.xlabel(columns)
         plt.ylabel("Frequency")

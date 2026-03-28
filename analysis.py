@@ -1,7 +1,10 @@
+import pandas as pd
+
+# ---------- Helper Function: Detect ID-like Columns ----------
 def is_id_column(series):
     name = series.name.lower()
 
-    # Strong keyword filtering
+    # Keyword-based filtering
     id_keywords = [
         "id", "number", "no", "code",
         "order", "customer", "product",
@@ -12,22 +15,32 @@ def is_id_column(series):
         if word in name:
             return True
 
-    # High uniqueness ratio (almost every row unique)
+    # High uniqueness ratio (but avoid small dataset issue)
     unique_ratio = series.nunique() / len(series)
-    if unique_ratio > 0.9:
+    if unique_ratio > 0.9 and series.nunique() > 20:
         return True
 
     return False
 
 
+# ---------- Main Function ----------
 def calculate_stats(df):
-    
-    numeric_df = df.select_dtypes(include='number')
+
+    # Step 1: Remove obvious non-analytical columns
+    ignore_keywords = ["id", "year", "date"]
+
+    valid_columns = [
+        col for col in df.select_dtypes(include=['number']).columns
+        if not any(word in col.lower() for word in ignore_keywords)
+    ]
+
+    # Use filtered numeric dataframe
+    numeric_df = df[valid_columns]
 
     if numeric_df.empty:
         raise ValueError("No numeric columns found in the dataset")
 
-    # Remove ID-like columns
+    # Step 2: Remove ID-like columns based on data pattern
     valid_numeric = [
         col for col in numeric_df.columns
         if not is_id_column(numeric_df[col])
@@ -36,7 +49,7 @@ def calculate_stats(df):
     if not valid_numeric:
         raise ValueError("Only identifier columns found. No meaningful data to analyze.")
 
-    # -------- MULTI METRIC MODE --------
+    # ---------- MULTI METRIC MODE ----------
     if len(valid_numeric) > 1:
         averages = numeric_df[valid_numeric].mean()
 
@@ -54,14 +67,14 @@ def calculate_stats(df):
 
         return stats, valid_numeric
 
-    # -------- SINGLE METRIC MODE --------
+    # ---------- SINGLE METRIC MODE ----------
     target_column = valid_numeric[0]
 
     stats = {
         "Mode": "Single-Metric",
         "Analyzed Column": target_column,
-        "Total": numeric_df[target_column].sum(),
-        "Average": numeric_df[target_column].mean(),
+        "Total": round(numeric_df[target_column].sum(), 2),
+        "Average": round(numeric_df[target_column].mean(), 2),
         "Maximum": numeric_df[target_column].max(),
         "Minimum": numeric_df[target_column].min(),
     }
