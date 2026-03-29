@@ -3,10 +3,12 @@ import pandas as pd
 from tkinter import filedialog
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from pyparsing import col
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Image
 from datetime import datetime
+from tkinter import Listbox, MULTIPLE
 
 # Appearance
 ctk.set_appearance_mode("dark")
@@ -41,8 +43,8 @@ chart_frame = ctk.CTkFrame(output_frame)
 chart_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
 # Dropdown
-dropdown = ctk.CTkOptionMenu(control_frame, values=["No Data"])
-dropdown.pack(side="left", padx=10)
+listbox = Listbox(control_frame, selectmode=MULTIPLE, height=5)
+listbox.pack(side="left", padx=10)
 
 # Functions
 def upload_file():
@@ -54,15 +56,19 @@ def upload_file():
         data = pd.read_csv(file_path)
 
         # Update dropdown dynamically
-        columns = list(data.columns)
-        dropdown.configure(values=columns)
-        dropdown.set(columns[0])
+        listbox.delete(0, "end")
+
+        for col in data.columns:
+            listbox.insert("end", col)
 
         # Show preview
         output_text.delete("1.0", "end")
         output_text.insert("end", "File loaded successfully!\n\nPreview:\n\n")
         output_text.insert("end", data.head().to_string(index=False))
 
+def get_selected_columns():
+    selected_indices = listbox.curselection()
+    return [listbox.get(i) for i in selected_indices]
 
 def generate_report():
     global data
@@ -72,47 +78,123 @@ def generate_report():
         output_text.insert("end", "Please upload a dataset first.")
         return
 
-    selected_metric = dropdown.get()
+    selected_columns = get_selected_columns()
+
+    if not selected_columns:
+        output_text.delete("1.0", "end")
+        output_text.insert("end", "Please select at least one column.")
+        return
 
     output_text.delete("1.0", "end")
-    output_text.insert("end", f"Generating report for: {selected_metric}\n\n")
 
-    if selected_metric in data.columns:
-        output_text.insert("end", f"Mean: {data[selected_metric].mean():.2f}\n")
-        output_text.insert("end", f"Max: {data[selected_metric].max()}\n")
-        output_text.insert("end", f"Min: {data[selected_metric].min()}\n")
-        output_text.insert("end", "\nInsights:\n")
-        output_text.insert("end", generate_insights(selected_metric))
+    # 🔥 SINGLE METRIC MODE
+    if len(selected_columns) == 1:
+        col = selected_columns[0]
 
-        show_chart(selected_metric)
+        output_text.insert("end", f"\n📊 {col.upper()}\n")
+        output_text.insert("end", "-" * 25 + "\n")
+
+        if pd.api.types.is_numeric_dtype(data[col]):
+            output_text.insert("end", f"Mean: {data[col].mean():.2f}\n")
+            output_text.insert("end", f"Max: {data[col].max()}\n")
+            output_text.insert("end", f"Min: {data[col].min()}\n")
+
+            output_text.insert("end", "Insights:\n")
+            output_text.insert("end", generate_insights(col))
+
+            show_chart(col)  # 🔥 use single chart
+
+        else:
+            output_text.insert("end", "Non-numeric column selected.\n")
+
+    # 🔥 MULTI METRIC MODE
     else:
-        output_text.insert("end", "Selected column not found in dataset.")
+        for col in selected_columns:
+            output_text.insert("end", f"\n📊 {col.upper()}\n")
+            output_text.insert("end", "-" * 25 + "\n")
 
+            if pd.api.types.is_numeric_dtype(data[col]):
+                output_text.insert("end", f"Mean: {data[col].mean():.2f}\n")
+                output_text.insert("end", f"Max: {data[col].max()}\n")
+                output_text.insert("end", f"Min: {data[col].min()}\n")
+
+                output_text.insert("end", "Insights:\n")
+                output_text.insert("end", generate_insights(col) + "\n")
+            else:
+                output_text.insert("end", "Non-numeric column\n")
+
+        show_individual_charts(selected_columns)
 
 def show_chart(column):
     global chart_canvas
 
-    # Clear previous chart
     if chart_canvas:
         chart_canvas.get_tk_widget().destroy()
 
     fig, ax = plt.subplots(figsize=(5, 3))
 
-    # 🔥 Check if column is numeric
     if pd.api.types.is_numeric_dtype(data[column]):
         data[column].plot(kind='hist', bins=10, ax=ax)
-        ax.set_title(f"{column} Distribution (Histogram)")
-        ax.set_xlabel(column)
-        ax.set_ylabel("Frequency")
+        ax.set_title(f"{column} Distribution")
     else:
         data[column].value_counts().head(10).plot(kind='bar', ax=ax)
-        ax.set_title(f"{column} Distribution (Top Categories)")
-        ax.set_xlabel(column)
-        ax.set_ylabel("Count")
 
     chart_canvas = FigureCanvasTkAgg(fig, master=chart_frame)
     chart_canvas.draw()
     chart_canvas.get_tk_widget().pack(fill="both", expand=True)
+
+
+def show_individual_charts(columns):
+    # Clear old charts
+    for widget in chart_frame.winfo_children():
+        widget.destroy()
+
+    numeric_cols = [col for col in columns if pd.api.types.is_numeric_dtype(data[col])]
+
+    if not numeric_cols:
+        label = ctk.CTkLabel(chart_frame, text="No numeric columns selected")
+        label.pack()
+        return
+
+    for col in numeric_cols:
+        fig, ax = plt.subplots(figsize=(5, 3))
+
+        # 🔥 Individual histogram
+        data[col].plot(kind='hist', bins=10, ax=ax)
+
+        ax.set_title(f"{col} Distribution")
+        ax.set_xlabel(col)
+        ax.set_ylabel("Frequency")
+
+        canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(pady=10)
+
+# def show_multi_chart(columns):
+#     # Clear previous charts
+#     for widget in chart_frame.winfo_children():
+#         widget.destroy()
+
+#     numeric_cols = [col for col in columns if pd.api.types.is_numeric_dtype(data[col])]
+
+#     if not numeric_cols:
+#         label = ctk.CTkLabel(chart_frame, text="No numeric columns selected")
+#         label.pack()
+#         return
+
+#     for col in numeric_cols:
+#         fig, ax = plt.subplots(figsize=(5, 3))
+
+#         # Histogram for each column
+#         data[col].plot(kind='hist', bins=10, ax=ax)
+
+#         ax.set_title(f"{col} Distribution")
+#         ax.set_xlabel(col)
+#         ax.set_ylabel("Frequency")
+
+#         canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+#         canvas.draw()
+#         canvas.get_tk_widget().pack(pady=10)
 
 def generate_insights(column):
     if not pd.api.types.is_numeric_dtype(data[column]):
@@ -143,13 +225,16 @@ def generate_insights(column):
 
 def export_report():
     global data
-    
 
     if data is None:
         output_text.insert("end", "\nPlease upload data first.")
         return
 
-    selected_metric = dropdown.get()
+    selected_columns = get_selected_columns()
+
+    if not selected_columns:
+        output_text.insert("end", "\nPlease select at least one column.")
+        return
 
     file_path = filedialog.asksaveasfilename(
         defaultextension=".pdf",
@@ -159,36 +244,52 @@ def export_report():
     if not file_path:
         return
 
-    if selected_metric not in data.columns:
-        output_text.insert("end", "\nInvalid column selected.")
-        return
+    # 🔥 Prepare data
+    report_data = []
 
-    # Calculations
-    mean = data[selected_metric].mean()
-    max_val = data[selected_metric].max()
-    min_val = data[selected_metric].min()
+    for col in selected_columns:
+        if pd.api.types.is_numeric_dtype(data[col]):
+            report_data.append({
+                "col": col,
+                "mean": data[col].mean(),
+                "max": data[col].max(),
+                "min": data[col].min(),
+                "insights": generate_insights(col)
+            })
 
-    insights = generate_insights(selected_metric)
+    # 🔥 Create chart (single or multi)
+    chart_paths = []
 
-    # 🔥 Step 1: Save chart as image
-    chart_path = "temp_chart.png"
+    numeric_cols = []
 
-    plt.figure(figsize=(6, 4))
+    for col in selected_columns:
+        try:
+            pd.to_numeric(data[col])
+            numeric_cols.append(col)
+        except:
+            pass
 
-    if pd.api.types.is_numeric_dtype(data[selected_metric]):
-        data[selected_metric].plot(kind='hist', bins=10)
-        plt.title(f"{selected_metric} Distribution")
-    else:
-        data[selected_metric].value_counts().head(10).plot(kind='bar')
-        plt.title(f"{selected_metric} Top Categories")
+    for col in numeric_cols:
+        chart_path = f"{col}_chart.png"
 
-    plt.tight_layout()
-    plt.savefig(chart_path)
-    plt.close()
+        # 🔥 Force numeric conversion
+        temp_data = pd.to_numeric(data[col], errors='coerce')
 
-    # 🔥 Step 2: Create PDF
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        plt.figure(figsize=(6, 4))
+        temp_data.dropna().plot(kind='hist', bins=10)
+
+        plt.title(f"{col} Distribution")
+
+        plt.tight_layout()
+        plt.savefig(chart_path)
+        plt.close()
+
+        chart_paths.append(chart_path)
+
+    # 🔥 Create PDF
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
     from reportlab.lib.styles import getSampleStyleSheet
+    from datetime import datetime
 
     doc = SimpleDocTemplate(file_path)
     styles = getSampleStyleSheet()
@@ -197,43 +298,45 @@ def export_report():
 
     content = []
 
-    # 🔥 New Header (replace old title)
+    # Header
     content.append(Paragraph("Automated Data Report Generator", styles["Title"]))
     content.append(Spacer(1, 5))
     content.append(Paragraph(f"<i>Generated on: {current_time}</i>", styles["Normal"]))
     content.append(Spacer(1, 15))
 
-    # Optional divider
     content.append(Paragraph("=" * 60, styles["Normal"]))
     content.append(Spacer(1, 10))
 
-    content.append(Paragraph(f"<b>Selected Metric:</b> {selected_metric}", styles["Normal"]))
     content.append(Paragraph(f"<b>Total Records:</b> {len(data)}", styles["Normal"]))
     content.append(Spacer(1, 10))
 
-    content.append(Paragraph("<b>STATISTICAL SUMMARY</b>", styles["Heading2"]))
-    content.append(Spacer(1, 5))
-    content.append(Paragraph(f"Mean Value: {mean:.2f}", styles["Normal"]))
-    content.append(Paragraph(f"Maximum Value: {max_val}", styles["Normal"]))
-    content.append(Paragraph(f"Minimum Value: {min_val}", styles["Normal"]))
-    content.append(Spacer(1, 10))
+    # 🔥 Loop for all metrics
+    for item in report_data:
+        content.append(Paragraph(f"<b>Metric:</b> {item['col']}", styles["Heading2"]))
+        content.append(Spacer(1, 5))
 
-    content.append(Paragraph("<b>INSIGHTS</b>", styles["Heading2"]))
-    content.append(Spacer(1, 5))
-    content.append(Paragraph(insights.replace("\n", "<br/>"), styles["Normal"]))
-    content.append(Spacer(1, 15))
+        content.append(Paragraph(f"Mean: {item['mean']:.2f}", styles["Normal"]))
+        content.append(Paragraph(f"Max: {item['max']}", styles["Normal"]))
+        content.append(Paragraph(f"Min: {item['min']}", styles["Normal"]))
+        content.append(Spacer(1, 5))
 
-    # 🔥 Step 3: Add chart to PDF
-    content.append(Paragraph("<b>VISUALIZATION</b>", styles["Heading2"]))
+        content.append(Paragraph("Insights:", styles["Normal"]))
+        content.append(Paragraph(item['insights'].replace("\n", "<br/>"), styles["Normal"]))
+        content.append(Spacer(1, 10))
+
+    # Chart
+    content.append(Paragraph("<b>Visualization</b>", styles["Heading2"]))
     content.append(Spacer(1, 10))
-    content.append(Image(chart_path, width=400, height=250))
+    for path in chart_paths:
+        content.append(Image(path, width=400, height=250))
+        content.append(Spacer(1, 15))
     content.append(Spacer(1, 20))
 
     content.append(Paragraph("Generated by Automated Report Generator", styles["Italic"]))
 
     doc.build(content)
 
-    output_text.insert("end", "\nPDF report with chart exported successfully.")
+    output_text.insert("end", "\nPDF report exported successfully.")
 
 
 # Buttons (YOU MISSED THESE 🔥)
