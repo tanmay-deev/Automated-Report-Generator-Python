@@ -8,7 +8,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Image
 from datetime import datetime
-from tkinter import Listbox, MULTIPLE
 
 # Appearance
 ctk.set_appearance_mode("dark")
@@ -17,7 +16,8 @@ ctk.set_default_color_theme("blue")
 # App window
 app = ctk.CTk()
 app.title("Automated Data Report Generator")
-app.geometry("900x600")
+app.geometry("1000x700")
+app.minsize(800, 600)
 
 # Global data
 data = None
@@ -39,12 +39,30 @@ output_text = ctk.CTkTextbox(output_frame, height=150)
 output_text.pack(fill="x", padx=10, pady=10)
 
 # Chart area (separate from text)
-chart_frame = ctk.CTkFrame(output_frame)
+chart_frame = ctk.CTkScrollableFrame(output_frame)
 chart_frame.pack(fill="both", expand=True, padx=10, pady=10)
+chart_frame.configure(height=400)
+output_frame.pack_propagate(False)
 
 # Dropdown
-listbox = Listbox(control_frame, selectmode=MULTIPLE, height=5)
-listbox.pack(side="left", padx=10)
+column_frame = ctk.CTkFrame(control_frame)
+column_frame.pack(side="left", padx=10, pady=10, fill="y")
+hint = ctk.CTkLabel(
+    column_frame,
+    text="(Select one or multiple)",
+    font=("Arial", 10)
+)
+column_label = ctk.CTkLabel(
+    column_frame,
+    text="Select Columns",
+    font=("Arial", 14, "bold")
+)
+hint.pack(anchor="w", padx=5)
+column_label.pack(anchor="w", padx=5, pady=5)
+scroll_frame = ctk.CTkScrollableFrame(column_frame, width=200, height=150)
+scroll_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+column_vars = {}
 
 # Functions
 def upload_file():
@@ -55,11 +73,25 @@ def upload_file():
     if file_path:
         data = pd.read_csv(file_path)
 
-        # Update dropdown dynamically
-        listbox.delete(0, "end")
+        
+        # Clear old checkboxes
+        for widget in scroll_frame.winfo_children():
+            widget.destroy()
 
+        column_vars.clear()
+
+        # Create checkboxes
         for col in data.columns:
-            listbox.insert("end", col)
+            var = ctk.BooleanVar()
+
+            chk = ctk.CTkCheckBox(
+                scroll_frame,
+                text=col,
+                variable=var
+            )
+            chk.pack(anchor="w", padx=5, pady=2)
+
+            column_vars[col] = var
 
         # Show preview
         output_text.delete("1.0", "end")
@@ -67,8 +99,7 @@ def upload_file():
         output_text.insert("end", data.head().to_string(index=False))
 
 def get_selected_columns():
-    selected_indices = listbox.curselection()
-    return [listbox.get(i) for i in selected_indices]
+    return [col for col, var in column_vars.items() if var.get()]
 
 def generate_report():
     global data
@@ -128,10 +159,10 @@ def generate_report():
 def show_chart(column):
     global chart_canvas
 
-    if chart_canvas:
-        chart_canvas.get_tk_widget().destroy()
+    for widget in chart_frame.winfo_children():
+        widget.destroy()
 
-    fig, ax = plt.subplots(figsize=(5, 3))
+    fig, ax = plt.subplots(figsize=(4, 5))
 
     if pd.api.types.is_numeric_dtype(data[column]):
         data[column].plot(kind='hist', bins=10, ax=ax)
@@ -139,9 +170,13 @@ def show_chart(column):
     else:
         data[column].value_counts().head(10).plot(kind='bar', ax=ax)
 
-    chart_canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+    chart_container = ctk.CTkFrame(chart_frame)
+    chart_container.pack(pady=10)
+
+    chart_canvas = FigureCanvasTkAgg(fig, master=chart_container)
     chart_canvas.draw()
-    chart_canvas.get_tk_widget().pack(fill="both", expand=True)
+
+    chart_canvas.get_tk_widget().pack()
 
 
 def show_individual_charts(columns):
@@ -152,23 +187,50 @@ def show_individual_charts(columns):
     numeric_cols = [col for col in columns if pd.api.types.is_numeric_dtype(data[col])]
 
     if not numeric_cols:
-        label = ctk.CTkLabel(chart_frame, text="No numeric columns selected")
-        label.pack()
+        ctk.CTkLabel(chart_frame, text="No numeric columns selected").pack()
         return
 
     for col in numeric_cols:
-        fig, ax = plt.subplots(figsize=(5, 3))
+        fig, ax = plt.subplots(figsize=(6, 5))
 
-        # 🔥 Individual histogram
         data[col].plot(kind='hist', bins=10, ax=ax)
-
         ax.set_title(f"{col} Distribution")
         ax.set_xlabel(col)
         ax.set_ylabel("Frequency")
 
-        canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+        # 🔥 MAIN ROW
+        row_frame = ctk.CTkFrame(chart_frame)
+        row_frame.pack(fill="x", pady=10, padx=10)
+
+        # 🔥 LEFT → METRICS (fixed width)
+        metrics_frame = ctk.CTkFrame(row_frame, width=220)
+        metrics_frame.pack(side="left", fill="y", padx=10, pady=10)
+        metrics_frame.pack_propagate(False)  # VERY IMPORTANT
+
+        # Data
+        mean = data[col].mean()
+        max_val = data[col].max()
+        min_val = data[col].min()
+        insight = generate_insights(col)
+
+        # Content
+        ctk.CTkLabel(metrics_frame, text=col.upper(), font=("Arial", 12, "bold")).pack(anchor="w")
+        ctk.CTkLabel(metrics_frame, text=f"Mean: {mean:.2f}").pack(anchor="w")
+        ctk.CTkLabel(metrics_frame, text=f"Max: {max_val}").pack(anchor="w")
+        ctk.CTkLabel(metrics_frame, text=f"Min: {min_val}").pack(anchor="w")
+        ctk.CTkLabel(metrics_frame, text="Insights:", font=("Arial", 10, "bold")).pack(anchor="w")
+        ctk.CTkLabel(metrics_frame, text=insight, wraplength=200, justify="left").pack(anchor="w")
+
+        # 🔥 RIGHT → CHART (flexible)
+        chart_container = ctk.CTkFrame(row_frame)
+        chart_container.pack(side="left", padx=10, pady=10)
+
+        canvas = FigureCanvasTkAgg(fig, master=chart_container)
         canvas.draw()
-        canvas.get_tk_widget().pack(pady=10)
+        
+        canvas.get_tk_widget().pack(padx=10, pady=10)
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+        
 
 # def show_multi_chart(columns):
 #     # Clear previous charts

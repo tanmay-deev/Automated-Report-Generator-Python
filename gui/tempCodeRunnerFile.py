@@ -1,0 +1,1 @@
+chart_frame = ctk.CTkFrame(output_frame)
