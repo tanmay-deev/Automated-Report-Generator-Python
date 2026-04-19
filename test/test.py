@@ -1,8 +1,8 @@
-from data_loader import load_file
-from analysis import calculate_stats
-from charts import generate_charts
-from report import generate_pdf
-from summary_generator import generate_summary
+from src.core.data_loader import load_file
+from src.core.analysis import calculate_stats
+from src.core.charts import generate_charts
+from src.core.report import generate_pdf
+from src.core.summary_generator import generate_summary
 
 try:
     data = load_file("marks-single-metric.csv")
